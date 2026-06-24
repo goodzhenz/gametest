@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>放學後的1830 - 驚嚇全面升級版</title>
+    <style>
+        body { background-color: #0d0d0d; color: #d6d6c2; font-family: 'Courier New', Courier, monospace, sans-serif; padding: 10px; margin: 0; user-select: none; -webkit-user-select: none; overflow-x: hidden; }
+        
+        button, .inv-slot, .interactive-object, .e-btn { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+        .game-container { max-width: 960px; margin: 10px auto; position: relative; width: 100%; }
+        .game-wrapper { display: flex; background: #1a1a1a; border: 3px solid #3a3a32; box-shadow: 0 0 20px rgba(0,0,0,0.8); flex-wrap: wrap; }
+        
+        .story-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #0a0a0a; z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; text-align: center; line-height: 1.8; }
+        .story-text { max-width: 600px; font-size: 14px; margin-bottom: 20px; white-space: pre-line; color: #b5b59e; }
+        .story-btn { background: #3a3a32; color: #d6d6c2; border: 1px solid #5a5a4f; padding: 10px 25px; font-size: 14px; cursor: pointer; border-radius: 4px; }
+        .story-btn:hover { background: #f1c40f; color: #000; }
+
+        /* 視卷基礎外框 */
+        .room-viewport { width: 600px; height: 500px; background: #2b2b24; position: relative; overflow: hidden; border-right: 3px solid #3a3a32; transition: background 0.1s; flex-grow: 1; }
+        
+        /* 互動場景容器（桌子、物件等放這裡，寬高固定以利定位） */
+        .scene-content { width: 600px; height: 500px; position: absolute; top: 0; left: 50%; transform: translateX(-50%); pointer-events: none; }
+        .scene-content * { pointer-events: auto; }
+
+        @media (max-width: 768px) { 
+            .room-viewport { width: 100%; height: 500px; border-right: none; border-bottom: 3px solid #3a3a32; } 
+        }
+        
+        .view-title { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 5px 15px; font-size: 13px; border: 1px solid #4a4a3f; letter-spacing: 2px; z-index: 10; }
+        
+        .interactive-object { position: absolute; background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.15); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; text-align: center; color: #a6a68f; transition: all 0.2s; box-sizing: border-box; z-index: 2; }
+        .interactive-object:hover { background: rgba(241, 196, 15, 0.15); border-color: #f1c40f; color: #f1c40f; }
+        
+        .nav-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 45px; height: 65px; background: rgba(0,0,0,0.5); color: #fff; font-size: 24px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 5; }
+        .nav-arrow:hover { background: rgba(0,0,0,0.8); color: #f1c40f; }
+        .arrow-left { left: 0; border-radius: 0 8px 8px 0; }
+        .arrow-right { right: 0; border-radius: 8px 0 0 8px; }
+
+        .inventory-panel { width: 160px; background: #151512; padding: 15px; display: flex; flex-direction: column; align-items: center; box-sizing: border-box; }
+        @media (max-width: 768px) { .inventory-panel { width: 100%; flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 10px; } .inventory-title { width: 100%; text-align: center; margin-bottom: 5px !important; } }
+        .inventory-title { font-size: 13px; margin-bottom: 12px; color: #8a8a75; letter-spacing: 1px; }
+        .inv-slot { width: 120px; height: 52px; background: #22221c; border: 2px solid #3a3a32; margin-bottom: 8px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; text-align: center; border-radius: 4px; padding: 2px; box-sizing: border-box; overflow: hidden; }
+        @media (max-width: 768px) { .inv-slot { margin-bottom: 0; width: 28%; height: 48px; } }
+        .inv-slot.selected { border-color: #f1c40f; background: #2d2d24; color: #f1c40f; }
+        .inv-inspect-tip { font-size: 9px; color: #7a7a65; margin-top: 2px; text-decoration: underline; }
+
+        .text-overlay { position: absolute; bottom: 0; left: 0; right: 0; height: 130px; background: rgba(0,0,0,0.85); padding: 15px; font-size: 13px; box-sizing: border-box; border-top: 2px solid #3a3a32; overflow-y: auto; white-space: pre-line; z-index: 4; transition: all 0.2s; }
+        
+        .popup-lock { display: none; position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%); background: #1e1e19; border: 2px solid #f1c40f; padding: 15px; text-align: center; border-radius: 4px; box-shadow: 0 0 25px #000; z-index: 100; color: #d6d6c2; width: 90%; max-width: 370px; box-sizing: border-box; }
+        .popup-lock input { background: #0d0d0d; border: 1px solid #4a4a3f; color: #fff; padding: 8px; text-align: center; font-size: 18px; letter-spacing: 3px; width: 150px; margin-bottom: 10px; text-transform: uppercase; }
+        .popup-lock button { background: #3a3a32; color: #d6d6c2; border: 1px solid #5a5a4f; padding: 6px 15px; cursor: pointer; margin: 4px; border-radius: 3px; }
+        .popup-lock button:hover { background: #f1c40f; color: #000; }
+        
+        .ending-btn-group { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
+        .ending-choice-btn { background: #2b2b24; color: #d6d6c2; border: 1px solid #5a5a4f; padding: 12px; text-align: left; font-size: 13px; cursor: pointer; border-radius: 4px; line-height: 1.4; transition: all 0.2s; }
+        .ending-choice-btn:hover { background: #f1c40f; color: #000; border-color: #fff; padding-left: 18px; }
+
+        .e-pad { margin: 10px 0; display: grid; grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(3, 58px); gap: 6px; justify-content: center; }
+        .e-btn { background: #2d2d24; border: 1px solid #5a5a4f; color: #fff; font-size: 22px; font-weight: bold; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; user-select: none; -webkit-user-select: none; }
+        .e-btn:hover { background: #f1c40f; color: #000; border-color: #fff; }
+        .e-display { font-size: 18px; background: #0d0d0d; padding: 5px; letter-spacing: 6px; height: 26px; color: #f1c40f; border: 1px solid #4a4a3f; font-weight: bold; }
+
+        .rotate-canvas { width: 90px; height: 90px; border: 2px solid #4a4a3f; margin: 5px auto; display: flex; align-items: center; justify-content: center; font-size: 11px; transition: transform 0.3s; background: #2d2d24; color: #d6d6c2; }
+        
+        .order-hint-banner { background: #2b2414; border: 1px dashed #f1c40f; padding: 6px; font-size: 12px; color: #f1c40f; font-weight: bold; margin: 8px auto; border-radius: 4px; max-width: 320px; }
+
+        .ending-scroll-view { max-height: 380px; overflow-y: auto; padding-right: 10px; text-align: left; }
+        .ending-scroll-view::-webkit-scrollbar { width: 8px; }
+        .ending-scroll-view::-webkit-scrollbar-track { background: #1a1a1a; }
+        .ending-scroll-view::-webkit-scrollbar-thumb { background: #4a4a3f; border-radius: 4px; }
+        .ending-scroll-view::-webkit-scrollbar-thumb:hover { background: #f1c40f; }
+
+        .reload-btn { margin-top: 25px; background: #34495e; color: #fff; border: 1px solid #5d6d7e; padding: 10px 20px; font-size: 13px; cursor: pointer; border-radius: 4px; display: inline-block; animation: pulse 2s infinite; }
+        .reload-btn:hover { background: #e74c3c; box-shadow: 0 0 10px rgba(231,76,60,0.6); }
+        @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; } 100% { opacity: 0.8; } }
+
+        .scare-shake { animation: shakeEffect 0.1s infinite; }
+        @keyframes shakeEffect {
+            0% { transform: translate(3px, 5px) rotate(1deg); }
+            20% { transform: translate(-5px, -3px) rotate(-2deg); }
+            40% { transform: translate(-2px, 3px) rotate(0deg); }
+            60% { transform: translate(4px, -2px) rotate(2deg); }
+            80% { transform: translate(-3px, 4px) rotate(-1deg); }
+            100% { transform: translate(2px, -4px) rotate(1deg); }
+        }
+        .scare-flash { animation: flashEffect 0.15s infinite; }
+        @keyframes flashEffect {
+            0% { background-color: #7f0000; }
+            50% { background-color: #ffffff; }
+            100% { background-color: #000000; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="game-container" id="main-container">
+    <div class="story-overlay" id="story-layer">
+        <div class="story-text" id="story-text">載入中...</div>
+        <button class="story-btn" id="story-btn" onclick="nextStoryStage()">點擊繼續</button>
+    </div>
+
+    <div class="game-wrapper">
+        <div class="room-viewport" id="viewport">
+            <div class="view-title" id="view-title">Room</div>
+            <!-- 置中核心容器 -->
+            <div id="scene-objects" class="scene-content"></div>
+
+            <button class="nav-arrow arrow-left" onclick="changeDirection(-1)">◂</button>
+            <button class="nav-arrow arrow-right" onclick="changeDirection(1)">▸</button>
+
+            <div class="popup-lock" id="popup-lock">
+                <div id="popup-prompt" style="margin-bottom:10px; font-size:13px; max-width: 340px; line-height: 1.5; color: #f1c40f;">輸入密碼</div>
+                <div id="popup-custom-content"></div>
+                <input type="text" id="lock-input">
+                <br>
+                <div id="popup-default-buttons">
+                    <button id="lock-confirm-btn" onclick="submitLock()">確認</button>
+                    <button id="lock-close-btn" onclick="closePopup()" style="background:#555;">關閉</button>
+                </div>
+            </div>
+
+            <div class="text-overlay" id="text-log"></div>
+        </div>
+
+        <div class="inventory-panel">
+            <div class="inventory-title">ITEMS</div>
+            <div class="inv-slot" id="slot-0" onclick="selectItem(0)">-空-</div>
+            <div class="inv-slot" id="slot-1" onclick="selectItem(1)">-空-</div>
+            <div class="inv-slot" id="slot-2" onclick="selectItem(2)">-空-</div>
+            <div class="inv-slot" id="slot-3" onclick="selectItem(3)">-空-</div>
+            <div class="inv-slot" id="slot-4" onclick="selectItem(4)">-空-</div>
+            <div class="inv-slot" id="slot-5" onclick="selectItem(5)">-空-</div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentRoom = '序章';
+let storyStage = 0;
+let direction = 0; 
+let inventory = [];
+let selectedItemIndex = null;
+let activeLockType = '';
+let scareTimer = null; 
+const maxSlots = 6;
+
+let r1_readNotebook = false, r1_pencilBoxOpened = false;
+let r2_hasDryer = false, r2_windowBlown = false, r2_boxOpened = false, r2_artDegrees = 0;
+let r2_inputEWords = []; 
+let r3_foundFragments = false, r3_pictureStatus = 'none', r3_boxOpened = false;
+let r4_pianoTriggered = false;
+let r3_cabinetClickCount = 0; 
+let isScareActive = false;
+
+function showStory(text, btnText) {
+    document.getElementById('story-text').innerText = text;
+    document.getElementById('story-btn').innerText = btnText;
+    document.getElementById('story-layer').style.display = 'flex';
+}
+function hideStory() { document.getElementById('story-layer').style.display = 'none'; }
+
+function nextStoryStage() {
+    if (currentRoom === '序章') {
+        if (storyStage === 0) {
+            showStory("【前言】\n\n5月20日，狂風暴雨的颱風夜。\n因為沒完沒了的超時工作，你又一次忘記了去學校接小學二年級的兒子「曉宇」。\n\n當你驚醒並冒著風雨趕到校園時，時間已經深夜。學校早已漆黑一片，空無一人，但曉宇並沒有回家。\n你手裡的手電筒，成了這片黑暗中唯一的微光……", "推開教室大門...");
+            storyStage = 1;
+        } else {
+            currentRoom = '二年一班教室'; direction = 0; hideStory();
+            log("【二年一班教室】\n空蕩蕩的教室裡安靜得可怕。風雨在窗外怒吼，曉宇的椅背上還挂著他小小的雙肩書包。\n他一定在這裡等了很久、很久……\n（提示：使用畫面兩側的箭頭可切換轉向，環顧教室尋找線索。）");
+            renderScene();
+        }
+    } 
+    else if (currentRoom === '轉場_到_保健室') {
+        currentRoom = '保健室'; direction = 0; hideStory();
+        log("【保健室】\n走廊那頭飄來刺刺的化學消毒水味，伴隨著刺骨的濕氣。\n手電筒的光束在慘白的牆壁上晃動，這裡冷得像一個冰櫃。");
+        renderScene();
+    }
+    else if (currentRoom === '轉場_到_美術教室') {
+        currentRoom = '美術教室'; direction = 0; hideStory();
+        log("【美術教室】\n推開沉重的木門，四周散落著冰冷的石膏頭像，在黑暗中像是一張張窺視的臉。\n地上滿是被人狠狠撕碎的畫作紙屑，空氣中飄散著霉味。");
+        renderScene();
+    }
+    else if (currentRoom === '轉場_到_音樂教室') {
+        currentRoom = '音樂教室'; direction = 0; hideStory();
+        log("【音樂教室】\n空曠的教室中央，靜靜橫陳著一台巨大的黑色平台鋼琴。\n在微弱的光照下，它像是一具沉睡的巨獸，等待著被喚醒心中壓抑的聲音。");
+        renderScene();
+    }
+    else if (currentRoom === '轉場_到_頂樓天台') {
+        currentRoom = '頂樓天台'; direction = 0; hideStory();
+        log("【頂樓天台】\n推開鐵門的剎那，狂風暴雨排山倒海般灌了進來，瞬間將你淋透。\n冰冷的雨水打在臉上，但在右側圍牆角落，你看到了那個在風雨中搖晃的破爛紙箱……那裡有他的氣息。");
+        renderScene();
+    }
+}
+
+function log(text) { document.getElementById('text-log').innerText = text; }
+function alertItem(itemName) { alert(`✨【獲得道具】：${itemName}`); }
+
+function addItem(item) {
+    if(inventory.includes(item)) return;
+    if(inventory.length >= maxSlots) return;
+    inventory.push(item);
+    renderInventory();
+    alertItem(item);
+}
+function removeItem(item) {
+    inventory = inventory.filter(i => i !== item);
+    selectedItemIndex = null;
+    renderInventory();
+}
+function renderInventory() {
+    for(let i=0; i<maxSlots; i++) {
+        const slot = document.getElementById(`slot-${i}`);
+        if (inventory[i]) {
+            if(inventory[i].includes("畫")) {
+                slot.innerHTML = `<div>${inventory[i]}</div><div class="inv-inspect-tip">點擊查閱/裝備</div>`;
+            } else {
+                slot.innerText = inventory[i];
+            }
+        } else {
+            slot.innerText = '-空-';
+        }
+        slot.classList.remove('selected');
+    }
+    if(selectedItemIndex !== null) {
+        document.getElementById(`slot-${selectedItemIndex}`).classList.add('selected');
+    }
+}
+
+function selectItem(index) {
+    if(!inventory[index]) return;
+    if(selectedItemIndex === index) {
+        selectedItemIndex = null;
+        document.getElementById(`slot-${index}`).classList.remove('selected');
+    } else {
+        if(selectedItemIndex !== null) document.getElementById(`slot-${selectedItemIndex}`).classList.remove('selected');
+        selectedItemIndex = index;
+        document.getElementById(`slot-${index}`).classList.add('selected');
+    }
+    if(inventory[index].includes("畫")) {
+        inspectPicture(inventory[index]);
+    }
+}
+function getSelected() { return selectedItemIndex !== null ? inventory[selectedItemIndex] : null; }
+function changeDirection(offset) { direction = (direction + offset + 4) % 4; renderScene(); }
+
+function openPopup(type, promptText) {
+    if(isScareActive) return;
+    activeLockType = type;
+    document.getElementById('popup-prompt').innerText = promptText;
+    document.getElementById('popup-custom-content').innerHTML = '';
+    
+    const lockInput = document.getElementById('lock-input');
+    lockInput.style.display = 'block';
+    lockInput.style.background = '#0d0d0d';
+    lockInput.disabled = false;
+
+    const confBtn = document.getElementById('lock-confirm-btn');
+    const closeBtn = document.getElementById('lock-close-btn');
+    confBtn.style.position = 'static';
+    confBtn.style.display = 'inline-block';
+    closeBtn.style.position = 'static';
+    confBtn.onmouseenter = null;
+    closeBtn.onmouseenter = null;
+    
+    document.getElementById('popup-default-buttons').style.display = 'block';
+    document.getElementById('popup-lock').style.display = 'block';
+}
+
+function closePopup() {
+    if(isScareActive) return;
+    document.getElementById('popup-lock').style.display = 'none';
+    document.getElementById('lock-input').value = '';
+    
+    const logBox = document.getElementById('text-log');
+    logBox.style.background = 'rgba(0,0,0,0.85)';
+    logBox.style.color = '#d6d6c2';
+    document.getElementById('main-container').classList.remove('scare-shake');
+    renderScene();
+}
+
+function inspectPicture(itemName) {
+    if(isScareActive) return;
+    activeLockType = 'inspect';
+    document.getElementById('popup-prompt').innerText = `【細看道具】：${itemName} (已裝備)`;
+    document.getElementById('lock-input').style.display = 'none';
+    document.getElementById('popup-default-buttons').style.display = 'block';
+    
+    const confBtn = document.getElementById('lock-confirm-btn');
+    const closeBtn = document.getElementById('lock-close-btn');
+    confBtn.style.display = 'none'; 
+    confBtn.onmouseenter = null;
+    closeBtn.onmouseenter = null;
+    
+    let content = "";
+    if(itemName === "FAMILY蠟筆畫") {
+        content = `<div style="text-align:left; background:#222; padding:10px; font-size:12px; border:1px solid #4a4a3f; line-height:1.6;">
+            🎨 歪歪斜斜的蠟筆畫：<br>那是曉宇努力用彩色蠟筆拼湊出的全家福，上方寫著大大的「FAMILY」。<br><br>
+            📝 邊角上歪斜的小字：<br>
+            『我的夢想是跟爸爸媽媽一起去山上躺著看星星...爸爸說只要我這次考一百分，他就絕對不會加班，一定會帶我去看...』
+        </div>`;
+    } else if(itemName === "LONELY浸濕畫") {
+        content = `<div style="text-align:left; background:#222; padding:10px; font-size:12px; border:1px solid #4a4a3f; line-height:1.6;">
+            🎨 溶解褪色的畫作：<br>
+            原本溫馨的全家福在水流下被無情溶解，底層露出的，是一幅用黑色原子筆反覆用力塗抹的暴雨大哭圖。原本的FAMILY褪去，剩下的字母變成了：<br>
+            「<span style='color:#e74c3c'>L</span>(紅) <span style='color:#3498db'>O</span>(藍) <span style='color:#f1c40f'>N</span>(黃) <span style='color:#2ecc71'>E</span>(綠) LY Foro」。<br><br>
+            📝 戳破紙張的絕望字跡：<br>
+            『爸爸每次答應我的事情，都因為加班忘記了...學校好黑，我好害怕...我不要大房子，我也不要新玩具，我只想要爸爸遵守諾言，帶我去【看星星】...』
+        </div>`;
+    }
+    document.getElementById('popup-custom-content').innerHTML = content;
+    document.getElementById('popup-lock').style.display = 'block';
+}
+
+function renderScene() {
+    ensureViewportBaseUI();
+    document.getElementById('view-title').innerText = `${currentRoom}`;
+    const container = document.getElementById('scene-objects');
+    container.innerHTML = ''; 
+
+    if (currentRoom === '二年一班教室') {
+        if (direction === 0) createObj(container, 220, 220, 160, 90, "散落著雜物的教師桌", r1_clickTeacherDesk);
+        else if (direction === 1) createObj(container, 100, 150, 400, 150, "狂暴風雨的窗戶", () => log("雨水瘋狂敲打著窗戶，玻璃劇烈震動。外面是一望未際的漆黑深夜。"));
+        else if (direction === 2) createObj(container, 200, 240, 200, 100, "曉宇的課桌抽屜", r1_clickXiaoyuDesk);
+        else if (direction === 3) createObj(container, 150, 120, 300, 150, "佈告欄\n(寒假作業)", r1_clickNoticeBoard);
+    } 
+    else if (currentRoom === '保健室') {
+        if (direction === 0) createObj(container, 150, 180, 300, 160, "白色病床隔簾", () => triggerScareScenario('bed'));
+        else if (direction === 1) createObj(container, 200, 150, 200, 180, "結霜的玻璃窗", r2_clickWindow);
+        else if (direction === 2) {
+            createObj(container, 120, 220, 160, 100, "老舊辦公桌", r2_clickOfficeDesk);
+            createObj(container, 340, 160, 140, 180, "緊鎖的藥品櫃", r2_clickMedicineCabinet);
+        } else if (direction === 3) {
+            createObj(container, 100, 120, 150, 250, "微黃的視力檢查表", r2_clickVisionChart);
+            createObj(container, 350, 150, 120, 220, "通往下一棟大樓的鐵門", r2_clickIronDoor);
+        }
+    }
+    else if (currentRoom === '美術教室') {
+        if (direction === 0) createObj(container, 230, 220, 140, 100, "講台上的密碼畫具箱", r3_clickPaintBox);
+        else if (direction === 1) createObj(container, 100, 150, 100, 200, "陳舊的置物櫃", r3_clickCabinetWithScareLogic);
+        else if (direction === 2) createObj(container, 200, 220, 180, 120, "滴水的水龍頭與洗手台", r3_clickSink);
+        else if (direction === 3) createObj(container, 250, 250, 120, 80, "角落的畫桌", r3_clickTableFragments);
+    }
+    else if (currentRoom === '音樂教室') {
+        if (direction === 0) createObj(container, 150, 220, 300, 130, "黑色平台鋼琴", r4_clickPiano);
+        else if (direction === 1) createObj(container, 250, 100, 100, 150, "掛牆的大時鐘", () => triggerScareScenario('clock'));
+        else if (direction === 3) createObj(container, 50, 120, 500, 120, "牆上的四幅西方作曲家畫像", r4_clickPortraits);
+    }
+    else if (currentRoom === '頂樓天台') {
+        if (direction === 1) createObj(container, 150, 180, 300, 220, "【曉宇的秘密基地】", r5_clickSpaceShip);
+        else createObj(container, 0, 0, 600, 500, "雷電交加的天台", () => log("暴雨如注，冷風灌進領口。快轉到右側視角尋找曉宇！"));
+    }
+}
+
+function ensureViewportBaseUI() {
+    let vp = document.getElementById('viewport');
+    if (!document.getElementById('scene-objects')) {
+        vp.innerHTML = `
+            <div class="view-title" id="view-title">Room</div>
+            <div id="scene-objects" class="scene-content"></div>
+            <button class="nav-arrow arrow-left" onclick="changeDirection(-1)">◂</button>
+            <button class="nav-arrow arrow-right" onclick="changeDirection(1)">▸</button>
+            <div class="popup-lock" id="popup-lock">
+                <div id="popup-prompt" style="margin-bottom:10px; font-size:13px; max-width: 340px; line-height: 1.5; color: #f1c40f;"></div>
+                <div id="popup-custom-content"></div>
+                <input type="text" id="lock-input">
+                <br>
+                <div id="popup-default-buttons">
+                    <button id="lock-confirm-btn" onclick="submitLock()">確認</button>
+                    <button id="lock-close-btn" onclick="closePopup()" style="background:#555;">關閉</button>
+                </div>
+            </div>
+            <div class="text-overlay" id="text-log"></div>
+        `;
+    }
+}
+
+function r1_clickNoticeBoard() { log("佈告欄上貼著全班的寒假作業『我的夢想』。曉宇用彩色蠟筆歪歪扭扭地畫了一個巨大的天文望遠鏡：\n『我的夢想是跟爸爸媽媽去山上躺著看星星。』\n看著那稚嫩的筆觸，你的心揪了一下。"); }
+function r1_clickTeacherDesk() {
+    r1_readNotebook = true;
+    log("教師桌上擺著一本翻開的聯絡簿，旁邊黏著一張曉宇寫的便條紙：\n『我的鉛筆盒密碼，是我最喜歡的神奇魔法時間喔！開了它就有機會見到爸爸媽媽了！』\n\n你翻開聯絡簿，看見下午放學的時間欄（16:00），被曉宇用紅筆密密麻麻地畫滿了無數顆期盼的星星。");
+}
+function r1_clickXiaoyuDesk() {
+    if(!r1_readNotebook) log("這是曉宇的課桌。課桌裡塞著一個四位數密碼鉛筆盒。上面扣得死死的，此時你毫無頭緒。");
+    else if(r1_pencilBoxOpened) log("鉛筆盒已經彈開，露出了裡面的雜物。");
+    else openPopup('r1_pencil', '那是個斑駁的密碼鉛筆盒。請輸入曉宇口中「最期待的魔法時間」：');
+}
+
+// 統一 Jump Scare 觸發邏輯（6秒後自動平息可按確認）
+function triggerScareScenario(type) {
+    if(isScareActive) return;
+    isScareActive = true;
+    
+    const logBox = document.getElementById('text-log');
+    logBox.style.background = '#4a0000';
+    logBox.style.color = '#fff';
+    
+    if (type === 'bed') {
+        logBox.innerText = `【系統錯誤 404 ! !】\n你顫抖著手猛地拉開病床隔簾 ──\n迎面而來的不是曉宇，而是一張慘白、沒有五官的巨大面孔死死貼在你的臉前！！！\n耳邊瞬間灌滿無數小孩子的尖叫聲：『為什麼不遵守約定！！！』`;
+    } else if (type === 'clock') {
+        logBox.innerText = `【DANGER! ! SYSTEM OVERLOAD】\n你望向大時鐘，時針分針突然像瘋了一樣逆時針狂轉！\n齒輪摩擦發出刺耳的尖叫聲，鐘面上緩緩流出鮮紅色的液體……\n一個冰冷扭曲的聲音在腦海震動：『留給你的時間……已經歸零了……』`;
+    } else if (type === 'cabinet') {
+        logBox.innerText = `【警 報 ! ! 404 ERROR】\n你在置物櫃暗處再度摸索……摸到了……一隻冰冷、黏稠、猛然抓住你手腕的小手！！！\n█ █ █ 為什麼現在才來 █ █ █ 留下來陪我 █ █ █`;
+    }
+    
+    document.getElementById('main-container').classList.add('scare-shake');
+    document.getElementById('viewport').classList.add('scare-flash');
+
+    activeLockType = 'trap_scare';
+    document.getElementById('popup-prompt').innerText = "⚠️ 瘋狂干擾中...請保持理智 (6秒後恢復)";
+    document.getElementById('popup-custom-content').innerHTML = `<b style="color:#e74c3c; font-size:14px;">內心的幻象正在擴大……</b>`;
+    document.getElementById('lock-input').style.display = 'none';
+    
+    // 前 6 秒按鈕會隨機逃跑
+    const confBtn = document.getElementById('lock-confirm-btn');
+    const closeBtn = document.getElementById('lock-close-btn');
+    confBtn.style.display = 'inline-block';
+    confBtn.onmouseenter = escapeButton;
+    closeBtn.onmouseenter = escapeButton;
+    document.getElementById('popup-lock').style.display = 'block';
+
+    // 6 秒後自動平息
+    if(scareTimer) clearTimeout(scareTimer);
+    scareTimer = setTimeout(() => {
+        document.getElementById('popup-prompt').innerText = "幻象平息。可點擊確認重整意識。";
+        confBtn.style.position = 'static';
+        closeBtn.style.position = 'static';
+        confBtn.onmouseenter = null;
+        closeBtn.onmouseenter = null;
+    }, 6000);
+}
+
+function r2_clickOfficeDesk() {
+    if(r2_hasDryer) log("辦公桌上的《保健室日誌》凌亂地寫著：『5/20 暴雨。二年一班曉宇因為衣服全濕，走來借吹風機。量了體溫是 █ █ . █ 度...不聽勸，拿著帽子就往舊大樓跑了...』");
+    else { r2_hasDryer = true; addItem("舊吹風機"); }
+}
+function r2_clickWindow() {
+    const item = getSelected();
+    if(item === "舊吹風機") {
+        r2_windowBlown = true;
+        log("你按下開關，對著結霜的冰冷玻璃一陣狂吹。滾燙的熱風讓厚重的霧氣散去，竟然緩緩顯現出當時保健室老師慌亂寫下的微弱數字殘影……那是體溫計上最危險的低溫：34.8。隨後，這抹殘影慢慢消逝在夜色中。");
+    } else { log("玻璃窗結著一層厚厚的白霜，外面漆黑一片。你總覺得上面似乎隱藏著什麼，需要用熱風將它吹乾顯像。"); }
+}
+function r2_clickMedicineCabinet() {
+    if(r2_boxOpened) log("藥品櫃已被打開。");
+    else if(!r2_windowBlown) log("藥品櫃被三位數的密碼鎖鎖住了。旁邊日記本提示『他離開時低到很危險的體溫』是打開這裡的鑰匙。");
+    else openPopup('r2_cabinet', '藥品櫃沉重冰冷。請輸入曉宇離開時那令人心疼的3位數體溫（如 34.8 則輸入 348）：');
+}
+function r2_clickVisionChart() { log("【視力檢查表】\n這張表被紅筆修改過，下角寫著一行字：『眼睛看到的，不一定是心裡想的方向。唯有把顛倒的世界轉正...』\n第一行➡️上 | 第二行➡️右 | 第三行➡️左 | 第四行➡️下"); }
+function r2_clickIronDoor() {
+    if(!r2_boxOpened) log("通往舊校舍走廊的鐵門被一個【E字型按鍵鎖】牢牢扣住。看來需要藥品櫃內的物件與視力表的方向對照。");
+    else openELockPopup();
+}
+
+function openELockPopup() {
+    if(isScareActive) return;
+    activeLockType = 'r2_dir_lock'; r2_inputEWords = [];
+    
+    document.getElementById('popup-prompt').innerText = "依序旋轉作品將景物轉正，並按下面板對應的方向按鈕：";
+    
+    let html = `
+        <div class="rotate-canvas" id="art-canvas">美術作業</div>
+        <div style="font-size:11px; color:#aaa; margin-bottom:5px;" id="art-status">0度</div>
+        <div style="margin-bottom: 5px;">
+            <button onclick="rotateArt(-90)" style="font-size:11px; padding:4px 8px;">向左轉90度</button>
+            <button onclick="rotateArt(90)" style="font-size:11px; padding:4px 8px;">向右轉90度</button>
+        </div>
+        <div class="order-hint-banner">📋 輸入順序：1.房子 ➡️ 2.太陽 ➡️ 3.小鳥 ➡️ 4.大樹</div>
+        <div class="e-display" id="e-display">____</div>
+        <div class="e-pad">
+            <div></div><button class="e-btn" onclick="pressE('山')">山</button><div></div>
+            <button class="e-btn" onclick="pressE('彐')">彐</button><button class="e-btn" style="background:#555;font-size:11px;" onclick="clearE()">清除</button><button class="e-btn" onclick="pressE('E')">E</button>
+            <div></div><button class="e-btn" onclick="pressE('⨄')">⨄</button><div></div>
+        </div>
+    `;
+    document.getElementById('popup-custom-content').innerHTML = html;
+    document.getElementById('lock-input').style.display = 'none'; 
+    
+    const confBtn = document.getElementById('lock-confirm-btn');
+    const closeBtn = document.getElementById('lock-close-btn');
+    confBtn.style.position = 'static';
+    confBtn.style.display = 'inline-block';
+    closeBtn.style.position = 'static';
+    confBtn.onmouseenter = null;
+    closeBtn.onmouseenter = null;
+    
+    document.getElementById('popup-default-buttons').style.display = 'block';
+    document.getElementById('popup-lock').style.display = 'block';
+    r2_artDegrees = 0; rotateArt(0);
+}
+
+function rotateArt(deg) {
+    r2_artDegrees = (r2_artDegrees + deg + 360) % 360;
+    document.getElementById('art-canvas').style.transform = `rotate(${r2_artDegrees}deg)`;
+    let statusText = `${r2_artDegrees}度 - `;
+    if(r2_artDegrees === 0) statusText += "【房子】是正的";
+    if(r2_artDegrees === 90) statusText += "【太陽】是正的";
+    if(r2_artDegrees === 180) statusText += "【大樹】是正的";
+    if(r2_artDegrees === 270) statusText += "【小鳥】是正的";
+    document.getElementById('art-status').innerText = statusText;
+}
+
+function pressE(char) {
+    if(r2_inputEWords.length >= 4) return;
+    r2_inputEWords.push(char);
+    document.getElementById('e-display').innerText = r2_inputEWords.join(' ');
+}
+function clearE() { r2_inputEWords = []; document.getElementById('e-display').innerText = '____'; }
+
+function r3_clickCabinetWithScareLogic() {
+    if(r3_pictureStatus !== 'none') { log("你已經拿到了被撕碎的畫作。"); return; }
+    r3_cabinetClickCount++;
+    if(r3_cabinetClickCount === 1) {
+        log("【陳舊的置物櫃】\n櫃門虛掩著，裡面黑漆漆的一片。你隱約看見裡面散落著一些碎紙片。要再伸手進去摸索看看嗎？");
+    } 
+    else if(r3_cabinetClickCount >= 2) {
+        triggerScareScenario('cabinet');
+    }
+}
+
+function r3_clickTableFragments() {
+    if(r3_pictureStatus !== 'none') { log("你已經拿到了被撕碎的畫作。"); return; }
+    if(!r3_foundFragments) {
+        r3_foundFragments = true; r3_pictureStatus = 'family';
+        addItem("FAMILY蠟筆畫");
+        log(`你在空無一人的畫桌抽屜深處摸索到了散落的碎紙片。一塊塊拼湊起來後，赫然是一幅全家福……\n（提示：隨時點擊右側背包的畫作，可以展開查看隱藏在筆觸下的心聲。）`);
+    }
+}
+
+function escapeButton(e) {
+    const rx = Math.floor(Math.random() * 200) - 100;
+    const ry = Math.floor(Math.random() * 150) - 75;
+    e.target.style.position = 'relative';
+    e.target.style.left = rx + 'px';
+    e.target.style.top = ry + 'px';
+}
+
+function endScareScenario() {
+    if(scareTimer) clearTimeout(scareTimer);
+    isScareActive = false;
+    const logBox = document.getElementById('text-log');
+    logBox.style.background = 'rgba(0,0,0,0.85)';
+    logBox.style.color = '#d6d6c2';
+    document.getElementById('main-container').classList.remove('scare-shake');
+    document.getElementById('viewport').classList.remove('scare-flash');
+    
+    const confBtn = document.getElementById('lock-confirm-btn');
+    const closeBtn = document.getElementById('lock-close-btn');
+    confBtn.style.position = 'static';
+    closeBtn.style.position = 'static';
+    confBtn.onmouseenter = null;
+    closeBtn.onmouseenter = null;
+
+    if(currentRoom === '美術教室' && r3_pictureStatus === 'none') {
+        r3_foundFragments = true; r3_pictureStatus = 'family';
+        addItem("FAMILY蠟筆畫");
+        log("你猛地抽回手，大口喘著粗氣！櫃子門砰地關上了。地上靜靜躺著你剛剛掙扎時扯出來的碎紙片……你驚魂未定地將它拼好。");
+    } else {
+        log("你掙退了束縛，眼前的幻象如潮水般退去。冷汗浸透了你的後背。");
+    }
+    closePopup();
+}
+
+function r3_clickSink() {
+    if(r3_pictureStatus === 'lonely') {
+        log("冰冷的水流沖刷著褪色的畫紙，洗去了彩色的偽裝，只剩下絕望的「LONELY」英文字母。");
+        return;
+    }
+    const item = getSelected();
+    if(item === "FAMILY蠟筆畫" && r3_pictureStatus === 'family') {
+        r3_pictureStatus = 'lonely';
+        inventory = inventory.map(i => i === "FAMILY蠟筆畫" ? "LONELY浸濕畫" : i);
+        selectedItemIndex = inventory.indexOf("LONELY浸濕畫"); 
+        renderInventory();
+        alertItem("LONELY浸濕畫");
+        log("【水流沖刷著畫紙……】\n當你把全家福浸入水中，脆弱的彩色蠟筆瞬間被水流溶解！彩色的世界褪去，底層浮現出一幅黑沉、壓抑的暴雨大哭圖。原本的「FAMILY」變成了刺眼的四個彩色英文字母……那代表著他無盡的寂寞。");
+    } else if(r3_pictureStatus === 'family') {
+        log("水龍頭無聲地滴著水。你必須先從右側背包「點擊選取」那張全家福畫作，再點擊洗手台。");
+    } else {
+        log("水龍頭滴答漏著水。冰冷的水流在黑夜中漫延，但你現在身上沒有可以清洗的物件。");
+    }
+}
+
+function r3_clickPaintBox() {
+    if(r3_boxOpened) log("畫具箱已經敞開。");
+    else if(r3_pictureStatus !== 'lonely') log("講台上放著一個老舊的工具箱。蓋子上刻著四個彩色圓圈：[紅]➡️[藍]➡️[黃]➡️[綠]。你現在毫無解開它的線索。");
+    else openPopup('r3_box', '對照浸濕畫作上的顏色對應關係，輸入藏在寂寞底下的4位字母暗號：\n[紅] ➡️ [藍] ➡️ [黃] ➡️ [綠]');
+}
+
+function r4_clickPortraits() { log("黑板上方並排掛著四幅西方作曲家的黑白肖像畫，他們的眼神冰冷，下方標註著名字與對應音調：\n1. 蕭邦 ─ Do (1)\n2. 莫札特 ─ Re (2)\n3. 貝多芬 ─ Mi (3)\n4. 巴哈 ─ Fa (4)"); }
+
+function r4_clickPiano() {
+    const item = getSelected();
+    if(!r4_pianoTriggered) {
+        if(item === "大眼仔布偶") {
+            r4_pianoTriggered = true; removeItem("大眼仔布偶");
+            log("當你把那隻破舊的大眼仔娃娃輕輕放在鋼琴譜架上的那一刻，寂靜的教室裡，琴鍵竟然無人自彈、劇烈地跳動起來！\n空氣中迴盪著局促卻無比熟悉的音符：「Fa ➡️ Re ➡️ Mi ➡️ Do」……\n隨後，琴鍵上方幽幽地亮起了密碼輸入鍵。");
+        } else { log("一台巨大的黑色鋼琴，在黑暗中沉寂著。琴譜架上凹陷進去一個圓形的槽位，形狀看起來……剛好可以放下一隻小小的毛絨玩具。"); }
+    } else { openPopup('r4_piano', '琴鍵在微微顫動。請根據鋼琴剛才自彈的音調順序：【Fa ➡️ Re ➡️ Mi ➡️ Do】，對照牆上畫像的數字編號，輸入4位解鎖密碼：'); }
+}
+
+function r5_clickSpaceShip() {
+    if(isScareActive) return;
+    activeLockType = 'ending_choice';
+    document.getElementById('popup-prompt').innerText = "【風雨中的太空船】\n破舊的紙箱在暴雨中劇烈搖晃。你走近它，耳邊傳來曉宇極力壓抑、卻無比委屈的啜泣聲：\n「外面好黑……好冷……爸爸，你真的來接我了嗎？我們以前說過的事……你真的還記得嗎？」\n\n看著手裡那張被雨水打濕的畫，這一次，看著眼前小小的紙箱，你要給他什麼樣的承諾？";
+    
+    document.getElementById('lock-input').style.display = 'none';
+    document.getElementById('popup-default-buttons').style.display = 'none';
+    
+    let html = `
+        <div class="ending-btn-group">
+            <button class="ending-choice-btn" onclick="selectEndingChoice('A')">選項一：「對不起，爸爸來了，別害怕！我們現在就立刻安全地一起回家吧！」</button>
+            <button class="ending-choice-btn" onclick="selectEndingChoice('B')">選項二：「對不起……爸爸答應你，我們這次不回家了，我們一起去山上躺著【看星星】！」</button>
+            <button class="ending-choice-btn" onclick="selectEndingChoice('A')">選項三：「對不起，都是爸爸不好，我保證以後再也不會因為加班忘記你、丟下你了。」</button>
+        </div>
+        <button onclick="closePopup()" style="background:#555; color:#fff; border:none; padding:6px 12px; margin-top:15px; cursor:pointer; border-radius:3px;">靠著牆角喘息（暫時離開）</button>
+    `;
+    document.getElementById('popup-custom-content').innerHTML = html;
+    document.getElementById('popup-lock').style.display = 'block';
+}
+
+function selectEndingChoice(choice) {
+    closePopup();
+    triggerEnding(choice);
+}
+
+function submitLock() {
+    if (activeLockType === 'trap_scare') {
+        endScareScenario();
+        return;
+    }
+
+    const val = document.getElementById('lock-input').value.toUpperCase().trim();
+    let isCorrect = false;
+    
+    if (activeLockType === 'r1_pencil') {
+        if (val === '1600') {
+            isCorrect = true; r1_pencilBoxOpened = true; closePopup();
+            currentRoom = '轉場_到_保健室';
+            showStory("【第一章 結束 ── 漫長的等待】\n\n咔噠一聲，鉛筆盒的卡榫彈開了。\n你看見裡面的橡皮擦背後，刻著密密麻麻的「爸爸」兩個字。每天下午16:00，當放學鐘聲響起，全班同學都牽著家長的手開心地離開，只有他，抱著這個鉛筆盒，坐在空無一人的窗邊，固執地從黃昏等到黑夜。\n\n鉛筆盒底層掉出了一張折疊的借用登記簿：『18:35，曉宇，借用吹風機與毛巾。衣服全濕。』\n他太冷了……你捏緊了拳頭，轉身朝走廊深處的保健室跑去。", "尋著腳印前往【保健室】");
+        } else { alert("密碼鎖紋絲不動。你難道忘記了，他每天放學後，一個人坐在窗邊期盼你出現的時間嗎？"); }
+    }
+    else if (activeLockType === 'r2_cabinet') {
+        if (val === '34.8' || val === '348') {
+            isCorrect = true; r2_boxOpened = true; closePopup(); addItem("黃色學生帽");
+            log("【成功解鎖！】\n櫃門咯吱一聲開了。裡面靜靜躺著一頂淋濕的【黃色學生帽】，帽沿上還寫著曉宇的名字。看著這頂帽子，你幾乎能看見他當時渾身顫抖、嘴唇發紫，卻還是緊緊抱著這頂帽子的無助模樣。\n在櫃子最深處，你還發現了一張被他揉得皺巴巴的《美術作業》。");
+        } else { alert("櫃門死死卡住。那是一個讓孩子身體失溫、陷入絕望的冰冷數字，再想想看。"); }
+    }
+    else if (activeLockType === 'r2_dir_lock') {
+        const answer = ['山', 'E', '彐', '⨄'].join('');
+        const userInput = r2_inputEWords.join('');
+        if (userInput === answer) {
+            isCorrect = true; closePopup(); currentRoom = '轉場_到_美術教室';
+            showStory("【第二章 結束 ── 顛倒的世界】\n\n按鍵鎖傳來沉悶的解鎖聲。鐵門在刺耳的摩擦聲中緩緩向兩側滑開。\n\n在曉宇眼裡，這個世界早就顛倒了。大人們總說努力工作是為了給他最好的未來，卻把他一個人丟在冰冷的黑暗中。他只能在撕貼畫裡，把家、把大樹、把太陽全部顛倒過來，試圖用這種方式引起你的注意。\n\n鐵門後是一條毫無光線的幽長走廊，通往舊校舍走廊深處的【美術教室】。你吸了一口氣，踏入黑暗。", "走向長廊深處");
+        } else {
+            alert("鎖頭傳來卡死的喀喀聲。顛倒的世界還沒被扶正，請重新對照景物與方向！");
+            clearE();
+            triggerWrongAnswerPunishment();
+            return;
+        }
+    }
+    else if (activeLockType === 'r3_box') {
+        if (val === 'LONE') {
+            isCorrect = true; r3_boxOpened = true; closePopup(); addItem("大眼仔布偶"); 
+            currentRoom = '轉場_到_音樂教室';
+            showStory("【第三章 結束 ── 褪色的謊言】\n\n畫具箱砰一聲彈開了。\n裡面沒有昂貴的畫筆，只有一隻髒兮兮、洗到褪色的【大眼仔布偶】。那是你前年隨手在夜市買給他的便宜玩具，你早就忘了，但他卻當成唯一的寶物，每天抱著它睡覺。\n\n此時，空曠的舊校舍裡忽然響起了微弱的琴聲，那旋律是曉宇最喜歡的《小星星》。局促、凌亂、帶著一絲哭腔……你抱緊布偶，循著琴聲向樓上的【音樂教室】狂奔而去。", "跟隨琴聲上樓");
+        } else { alert("箱子毫無反應。彩色的家庭只是他包裝寂寞的表象，沖洗掉偽裝後，那四個字母究竟是什麼？"); }
+    }
+    else if (activeLockType === 'r4_piano') {
+        if (val === '4231') {
+            isCorrect = true; closePopup(); currentRoom = '轉場_到_頂樓天台';
+            showStory("【第四章 結束 ── 遲到的車牌】\n\n鋼琴沉重的面板在一聲轟鳴中猛地彈開！\n裡面落下一張被淚水打濕、揉成一團的期末考卷。考卷上拿到了刺眼的一百分，但在分數的下方，曉宇用鉛筆發洩般地、一遍又一遍、無比用力地刻寫著同四個數字：4231……\n那是你的車牌號碼。\n\n他考了一百分，他在校門口死死盯著每一輛開過去的車，背下了你的車牌，卻始終沒有等到那輛熟悉的車停在他面前。\n伴隨著一聲巨響，通往頂樓天台的安全鐵門被狂風猛然吹開。風雨聲瞬間將你淹沒，你知道，他就在上面！", "衝上頂樓天台");
+        } else { alert("鋼琴發出刺耳的尖叫錯音。那四個音符在對應著誰的黑色畫像？再確認一次畫像順序。"); }
+    }
+
+    if(!isCorrect) {
+        triggerWrongAnswerPunishment();
+    }
+}
+
+function triggerWrongAnswerPunishment() {
+    isScareActive = true;
+    const viewport = document.getElementById('viewport');
+    const lockInput = document.getElementById('lock-input');
+    const prompt = document.getElementById('popup-prompt');
+    
+    viewport.classList.add('scare-flash');
+    prompt.innerText = "█ █ █ 錯了 █ 容錯終止 █ █ █\n你根本不在乎我！！！！！！";
+    prompt.style.color = '#ff0000';
+    if(lockInput) {
+        lockInput.value = "ERROR";
+        lockInput.style.background = '#4a0000';
+        lockInput.disabled = true;
+    }
+
+    setTimeout(() => {
+        viewport.classList.remove('scare-flash');
+        prompt.style.color = '#f1c40f';
+        if(lockInput) {
+            lockInput.value = "";
+            lockInput.style.background = '#0d0d0d';
+            lockInput.disabled = false;
+        }
+        isScareActive = false;
+        alert("……背後掠過一陣刺骨的惡寒。錯誤代價沉重，周遭的黑影似乎離你更近了一步。");
+    }, 1500);
+}
+
+function triggerEnding(type) {
+    const viewport = document.getElementById('viewport');
+    viewport.innerHTML = ''; 
+    const endDiv = document.createElement('div');
+    endDiv.className = 'ending-scroll-view';
+    
+    if (type === 'A') {
+        endDiv.innerHTML = `
+            <h2 style="color:#e74c3c; margin-top:0;">【結局：寂寞的太空船】</h2>
+            <p>紙箱裡傳來一聲更加絕望的啜泣，那聲音輕得像要飄散在風雨中：</p>
+            <p>「你還是……只是想把我帶回家……你根本不知道我想去哪裡……你根本不記得我們說好的事……」</p>
+            <p>你瘋狂地撲過去想要掀開紙箱，可就在你雙手觸碰的剎那，紙箱與裡面小小的身軀，竟然瞬間化作冰冷的黑色雨水，無情地融入了整片暴雨之中。四周重歸死寂，夜空中漆黑一片，再也沒有星星。</p>
+            <p>「砰！」你猛地睜開眼。四周是白色的牆壁與滴答作響的醫療儀器。你發現自己正躺在冰冷的醫院病床上，颱風已經過去，刺眼的陽光穿透窗簾灑在你身上。醫生臉色凝重地走進來，拍了拍你的肩膀：『節哀……我們盡力了。孩子送來時失溫太久，在昨晚18:30就已經……』</p>
+            <p>你轉頭看向旁邊空蕩蕩的病床，上面只留著一頂濕透的黃色帽子。這場名為內疚、遺憾與超時工作的無盡噩夢，將永遠受困於你的餘生，再也無法醒來。</p>
+            <br>
+            <button class="reload-btn" onclick="rollbackToChoices()">🕒 時空回溯：回到選擇對話前</button>
+        `;
+    } else {
+        endDiv.innerHTML = `
+            <h2 style="color:#f1c40f; margin-top:0;">【真結局：銀河系的約定】</h2>
+            <p>當你用盡全身力氣，對著暴雨歇斯底里地大喊出「看星星」這三個字時，整片喧囂的夜空驟然定格！</p>
+            <p>狂風停了，暴雨化作無數道溫暖而燦爛的流星雨，無聲地劃破夜空。眼前的破紙箱緩緩打開，曉宇揉著通紅的眼睛，大哭著撲進你的懷裡，他的身體終於不再冰冷。你死死抱著他，眼淚止不住地流。</p>
+            <p>「砰！」你猛地睜開眼。四周是白色的牆壁與滴答作響的醫療儀器。你發現自己趴在醫院的病床旁，颱風已經過去，溫暖的陽光灑在床沿。躺在床上的曉宇臉色紅潤，虛弱卻溫柔地睜開眼看著你微笑：「爸爸，你醒啦？」</p>
+            <p>醫生在一旁欣徽地說：『真是奇蹟，昨晚送到醫院時體溫低得太危險了，幸好在關鍵的18:30心跳穩了下來，孩子熬過來了。』</p>
+            <p>你緊緊握住他小小的手，眼淚再次流了下來，心裡的巨石終於落下。這一次，不論工作再忙，你絕不會再次錯過任何一個晴朗的夜空。你們，拉鉤約定好了。</p>
+            <p style="color:#2ecc71; font-weight:bold; margin-top:15px;">✨ 感謝試玩，你已成功救贖了曉宇的心靈。 ✨</p>
+            <br>
+            <button class="reload-btn" onclick="rollbackToChoices()" style="background:#27ae60; border-color:#2ecc71;">🕒 時空回溯：回到選擇對話前</button>
+        `;
+    }
+    viewport.appendChild(endDiv);
+}
+
+function rollbackToChoices() {
+    currentRoom = '頂樓天台';
+    direction = 1; 
+    ensureViewportBaseUI();
+    renderScene();
+    log("【時空回溯】時間流倒轉回到了暴雨的天台。命運的齒輪再次交到你的手上。");
+    r5_clickSpaceShip();
+}
+
+function createObj(parent, x, top, w, h, label, onClick) {
+    const div = document.createElement('div');
+    div.className = 'interactive-object';
+    div.style.left = x + 'px'; div.style.top = top + 'px'; div.style.width = w + 'px'; div.style.height = h + 'px';
+    div.innerText = label; div.onclick = onClick;
+    parent.appendChild(div);
+}
+
+showStory("【放學後的1830】\n\n◆ 簡單操作介紹 ◆\n1. 點擊或輕觸畫面中出現的「虛線方框」即可調查物件。\n2. 點擊畫面兩側的「◂ ▸ 導航箭頭」可以環顧四周。\n3. 右側/下方的背包點擊後可以「裝備道具」，裝備後再調查場景能解開特殊連鎖。\n\n💡 手機端最佳遊玩建議：請將手機「橫屏放倒」遊玩，視覺比例最完美喔！", "開始體驗");
+</script>
+
+</body>
+</html>
